@@ -1,6 +1,7 @@
 from matplotlib import pyplot as plt
 import keras.backend as K
 import numpy as np
+from keras.callbacks import Callback
 
 
 class LR_Finder(Callback):
@@ -86,7 +87,8 @@ class LR_Finder(Callback):
         '''
         lr_complete_vector = np.array(self.lrs)
         if lr_begin is not None and lr_end is not None:
-            indices = np.where((lr_complete_vector > lr_begin) & (lr_complete_vector < lr_end))
+            indices = np.where((lr_complete_vector > lr_begin)
+                               & (lr_complete_vector < lr_end))
             lr_vector = np.array(lr_complete_vector[indices])
             if smooth_loss:
                 loss_vector = np.array(self.smoothed_losses)[indices]
