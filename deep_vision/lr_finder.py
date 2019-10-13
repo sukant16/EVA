@@ -1,146 +1,120 @@
 from matplotlib import pyplot as plt
-import math
-from keras.callbacks import LambdaCallback
 import keras.backend as K
 import numpy as np
 
 
-class LRFinder:
-    """
-    Plots the change of the loss function of a Keras model when the learning rate is exponentially increasing.
-    See for details:
-    https://towardsdatascience.com/estimating-optimal-learning-rate-for-a-deep-neural-network-ce32f2556ce0
-    """
-    def __init__(self, model):
-        self.model = model
-        self.losses = []
-        self.lrs = []
+class LR_Finder(Callback):
+
+    def __init__(self, start_lr=1e-5, end_lr=10, step_size=None, beta=.98):
+        super().__init__()
+        self.start_lr = start_lr
+        self.end_lr = end_lr
+        self.step_size = step_size
+        self.beta = beta
+        self.lr_mult = (end_lr/start_lr)**(1/step_size)
+
+    def on_train_begin(self, logs=None):
         self.best_loss = 1e9
+        self.avg_loss = 0
+        self.losses, self.smoothed_losses, self.lrs, self.iterations = ([], [],
+                                                                        [], [])
+        self.iteration = 0
+        logs = logs or {}
+        K.set_value(self.model.optimizer.lr, self.start_lr)
 
-    def on_batch_end(self, batch, logs):
-        # Log the learning rate
-        lr = K.get_value(self.model.optimizer.lr)
-        self.lrs.append(lr)
+    def on_batch_end(self, epoch, logs=None):
+        logs = logs or {}
+        loss = logs.get('loss')
+        self.iteration += 1
 
-        # Log the loss
-        loss = logs['loss']
-        self.losses.append(loss)
+        self.avg_loss = self.beta * self.avg_loss + (1 - self.beta) * loss
+        smoothed_loss = self.avg_loss / (1 - self.beta**self.iteration)
 
-        # Check whether the loss got too large or NaN
-        if batch > 5 and (math.isnan(loss) or loss > self.best_loss * 4):
+        # Check if the loss is not exploding
+        if self.iteration > 1 and smoothed_loss > self.best_loss * 4:
             self.model.stop_training = True
             return
 
-        if loss < self.best_loss:
-            self.best_loss = loss
+        if smoothed_loss < self.best_loss or self.iteration == 1:
+            self.best_loss = smoothed_loss
 
-        # Increase the learning rate for the next batch
-        lr *= self.lr_mult
+        lr = self.start_lr * (self.lr_mult**self.iteration)
+
+        self.losses.append(loss)
+        self.smoothed_losses.append(smoothed_loss)
+        self.lrs.append(lr)
+        self.iterations.append(self.iteration)
         K.set_value(self.model.optimizer.lr, lr)
 
-    def find(self, x_train, y_train, start_lr, end_lr, batch_size=64, epochs=1):
-        # If x_train contains data for multiple inputs, use length of the first input.
-        # Assumption: the first element in the list is single input; NOT a list of inputs.
-        N = x_train[0].shape[0] if isinstance(x_train, list) else x_train.shape[0]
-        
-        # Compute number of batches and LR multiplier 
-        num_batches = epochs * N / batch_size
-        self.lr_mult = (float(end_lr) / float(start_lr)) ** (float(1) / float(num_batches))
-        # Save weights into a file
-        self.model.save_weights('tmp.h5')
+    def plot_lr(self):
+        plt.xlabel('Iterations')
+        plt.ylabel('Learning rate')
+        plt.plot(self.iterations, self.lrs)
 
-        # Remember the original learning rate
-        original_lr = K.get_value(self.model.optimizer.lr)
-
-        # Set the initial learning rate
-        K.set_value(self.model.optimizer.lr, start_lr)
-
-        callback = LambdaCallback(on_batch_end=lambda batch, logs: self.on_batch_end(batch, logs))
-
-        self.model.fit(x_train, y_train,
-                        batch_size=batch_size, epochs=epochs,
-                        callbacks=[callback])
-
-        # Restore the weights to the state before model fitting
-        self.model.load_weights('tmp.h5')
-
-        # Restore the original learning rate
-        K.set_value(self.model.optimizer.lr, original_lr)
-
-    def find_generator(self, generator, start_lr, end_lr, epochs=1, steps_per_epoch=None, **kw_fit):
-            if steps_per_epoch is None:
-                try:
-                    steps_per_epoch = len(generator)
-                except (ValueError, NotImplementedError) as e:
-                    raise e('`steps_per_epoch=None` is only valid for a'
-                            ' generator based on the '
-                            '`keras.utils.Sequence`'
-                            ' class. Please specify `steps_per_epoch` '
-                            'or use the `keras.utils.Sequence` class.')
-            self.lr_mult = (float(end_lr) / float(start_lr)) ** (float(1) / float(epochs * steps_per_epoch))
-
-            # Save weights into a file
-            self.model.save_weights('tmp.h5')
-
-            # Remember the original learning rate
-            original_lr = K.get_value(self.model.optimizer.lr)
-
-            # Set the initial learning rate
-            K.set_value(self.model.optimizer.lr, start_lr)
-
-            callback = LambdaCallback(on_batch_end=lambda batch,
-                                      logs: self.on_batch_end(batch, logs))
-
-            self.model.fit_generator(generator=generator,
-                                     epochs=epochs,
-                                     steps_per_epoch=steps_per_epoch,
-                                     callbacks=[callback],
-                                     **kw_fit)
-
-            # Restore the weights to the state before model fitting
-            self.model.load_weights('tmp.h5')
-
-            # Restore the original learning rate
-            K.set_value(self.model.optimizer.lr, original_lr)
-
-    def plot_loss(self, n_skip_beginning=10, n_skip_end=5, x_scale='log'):
-        """
-        Plots the loss.
-        Parameters:
-            n_skip_beginning - number of batches to skip on the left.
-            n_skip_end - number of batches to skip on the right.
-        """
-        plt.ylabel("loss")
-        plt.xlabel("learning rate (log scale)")
-        plt.plot(self.lrs[n_skip_beginning:-n_skip_end], self.losses[n_skip_beginning:-n_skip_end])
-        plt.xscale(x_scale)
-        plt.show()
-    def plot_loss_change(self, sma=1, n_skip_beginning=10, n_skip_end=5, y_lim=(-0.01, 0.01)):
-        """
-        Plots rate of change of the loss function.
-        Parameters:
-            sma - number of batches for simple moving average to smooth out the curve.
-            n_skip_beginning - number of batches to skip on the left.
-            n_skip_end - number of batches to skip on the right.
-            y_lim - limits for the y axis.
-        """
-        derivatives = self.get_derivatives(sma)[n_skip_beginning:-n_skip_end]
-        lrs = self.lrs[n_skip_beginning:-n_skip_end]
-        plt.ylabel("rate of loss change")
-        plt.xlabel("learning rate (log scale)")
-        plt.plot(lrs, derivatives)
-        plt.xscale('log')
+    def plot_lr_loss(self, n_skip_beginning=10, n_skip_end=5, x_scale='log',
+                     y_lim=None):
+        plt.ylabel('Loss')
+        plt.xlabel('Learning rate (log scale)')
+        plt.plot(self.lrs[n_skip_beginning:-n_skip_end],
+                 self.losses[n_skip_beginning:-n_skip_end])
         plt.ylim(y_lim)
-        plt.show()
-  
-    def get_derivatives(self, sma):
-        assert sma >= 1
-        derivatives = [0] * sma
-        for i in range(sma, len(self.lrs)):
-            derivatives.append((self.losses[i] - self.losses[i - sma]) / sma)
-        return derivatives
+        plt.xscale('log')
 
-    def get_best_lr(self, sma, n_skip_beginning=10, n_skip_end=5):
-        derivatives = self.get_derivatives(sma)
-        best_der_idx = np.argmax(derivatives[n_skip_beginning:-n_skip_end])[0]
-        return self.lrs[n_skip_beginning:-n_skip_end][best_der_idx]
+    def plot_smoothed_lr_loss(self, n_skip_beginning=10, n_skip_end=5,
+                              x_scale='log', y_lim=None):
+        plt.ylabel('Smoothed Losses')
+        plt.xlabel('Learning rate (log scale)')
+        plt.plot(self.lrs[n_skip_beginning:-n_skip_end],
+                 self.smoothed_losses[n_skip_beginning:-n_skip_end])
+        plt.ylim(y_lim)
+        plt.xscale(x_scale)
+
+    def plot_iter_loss(self, n_skip_beginning=10, n_skip_end=5):
+        plt.ylabel('Losses')
+        plt.xlabel('Iterations')
+        plt.plot(self.iterations[n_skip_beginning:-n_skip_end],
+                 self.losses[n_skip_beginning:-n_skip_end])
+
+    def get_derivatives(self, smooth_loss=True, lr_begin=0.001, lr_end=1):
+        '''
+        returns: tuple of array of derivative of loss w.r.t lr,
+                 lr array and loss array in the specified range of lr
+        parameters:
+          smooth: whether to use smooth loss
+          lr_begin & lr_end: these learning rates specify the range in which to
+                        calculate derivative of the loss w.r.t learning rate
+        '''
+        lr_complete_vector = np.array(self.lrs)
+        if lr_begin is not None and lr_end is not None:
+            indices = np.where((lr_complete_vector > lr_begin) & (lr_complete_vector < lr_end))
+            lr_vector = np.array(lr_complete_vector[indices])
+            if smooth_loss:
+                loss_vector = np.array(self.smoothed_losses)[indices]
+            else:
+                loss_vector = np.arrat(self.losses)[indices]
+        elif lr_begin is not None and lr_end is None:
+            indices = np.where(lr_complete_vector > lr_begin)
+            lr_vector = np.array(lr_complete_vector[indices])
+            if smooth_loss:
+                loss_vector = np.array(self.smoothed_losses)[indices]
+            else:
+                loss_vector = np.arrat(self.losses)[indices]
+        else:
+            indices = np.where(lr_complete_vector < lr_end)
+            lr_vector = np.array(lr_complete_vector[indices])
+            if smooth_loss:
+                loss_vector = np.array(self.smoothed_losses)[indices]
+            else:
+                loss_vector = np.arrat(self.losses)[indices]
+        der_vector = np.gradient(lr_vector, loss_vector)
+        return der_vector, lr_vector, loss_vector
+
+    def get_best_lr(self, der_vector, lr_vector):
+        '''
+        returns: learing rate at which loss change is maximum
+        parameters:
+            1. der_vector: array of the derivatives of loss w.r.t lr
+            2. lr_vector: array of lr
+        '''
+        idx = np.argmax(der_vector)
+        return lr_vector[idx]

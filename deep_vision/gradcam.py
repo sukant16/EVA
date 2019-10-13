@@ -3,7 +3,17 @@ import keras.backend as K
 import cv2
 
 
-def gradcam(actual_image, normalised_image, layer, model):
+def gradcam(actual_image, normalised_image, model, layer, n_channels):
+    '''
+    returns grad cam activations for the normalised image
+    parameters:
+    actual_image: unnormalised image
+    normalised_image: normalised actual image
+    model: CNN model used
+    layer: layer in the model from which to compute gradcam activations
+    n_channels: number of channels in the output feature map of layer
+    '''
+
     x = np.expand_dims(normalised_image, axis=0)
     preds = model.predict(x)
     class_idx = np.argmax(preds[0])
@@ -14,7 +24,7 @@ def gradcam(actual_image, normalised_image, layer, model):
     pooled_grads = K.mean(grads, axis=(0, 1, 2))
     iterate = K.function([model.input], [pooled_grads, last_conv_layer.output[0]])
     pooled_grads_value, conv_layer_output_value = iterate([x])
-    for j in range(32):
+    for j in range(n_channels):
         conv_layer_output_value[:, :, j] *= pooled_grads_value[j]
 
     heatmap = np.mean(conv_layer_output_value, axis=-1)
