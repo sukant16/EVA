@@ -33,15 +33,15 @@
 
    #### Post 3: Regularisation
 
-   1. David computes process times for each process in the network which you can see in the chart below. It is clear that BN takes a lot of computation time and also convolution is taking considerable more time. Dataloader and optimisation steps aren't taking much time.![](/media/sukant/Moz1/DS/EVA/Assignment 12/Process Times.png)
-   2. Converting batch norm wrights back to single precision takes care of the long times for BN. This was because default method of converting a model to half precision in PyTorch (as of version 0.4) triggers a slow code path which doesn’t use the optimized CuDNN routine. Now, it takes 186s to reach 94% accuracy in 35 epochs
-   3. Adding Cutout regularisation (8x8 square pixels area) along with other data augmentations (padding, clipping and horizontal flipping) led to 94.3 % median accuracy in 5 runs in 35 epochs. 
-   4. Making the LR reaching the peak at 8th instead of the 12th epoch and having linear decay in LR bring the median run accuracy to 94.5%. If number of epochs are reduced to 30, 4/5 of runs reach 94% accuracy.
-   5. Pushing batch size to 768 with number of epochs at 30, training time reduces to 154s
+      1. David computes process times for each process in the network which you can see in the chart below. It is clear that BN takes a lot of computation time and also convolution is taking considerable more time. Dataloader and optimisation steps aren't taking much time.![](https://github.com/sukant16/DS_utils/blob/master/EVA/Process%20Times.png?raw=true)
+      2. Converting batch norm wrights back to single precision takes care of the long times for BN. This was because default method of converting a model to half precision in PyTorch (as of version 0.4) triggers a slow code path which doesn’t use the optimized CuDNN routine. Now, it takes 186s to reach 94% accuracy in 35 epochs
+      3. Adding Cutout regularisation (8x8 square pixels area) along with other data augmentations (padding, clipping and horizontal flipping) led to 94.3 % median accuracy in 5 runs in 35 epochs. 
+      4. Making the LR reaching the peak at 8th instead of the 12th epoch and having linear decay in LR bring the median run accuracy to 94.5%. If number of epochs are reduced to 30, 4/5 of runs reach 94% accuracy.
+      5. Pushing batch size to 768 with number of epochs at 30, training time reduces to 154s
 
 ### Post 4: Architecture
 
-1. ![](/home/sukant/Pictures/Post4.png)
+1. ![](https://github.com/sukant16/DS_utils/blob/master/EVA/Post4.png?raw=true)
 
 Above table shows sequential growth of architecture where he as stripped the original network of residual connections. Later on, he runs more experiments with and without residual connections and find the below architecture as the best one which upon training for 24 epochs gave 94% accuracy in 7 out of 10 runs in 79s.
 
@@ -79,7 +79,10 @@ What's bad about Batch Norm?
 
 However, BN is required to train deeper networks and there is nothing which can replace it. Speed issue can be taken care of by using a good compiler which computes the statistics in the previous layer and applies them in the next avoiding unnecessary trips to memory and removing almost all overhead.
 
-- Batch norm acts on *histograms* of *per channel* activations (by shifting means and rescaling variances). ![](/media/sukant/Moz1/DS/EVA/Assignment 12/BN1.png)
+- Batch norm acts on *histograms* of *per channel* activations (by shifting means and rescaling variances). ![](https://296830-909578-raikfcquaxqncofqfm.stackpathdns.com/wp-content/uploads/2019/06/before_after_0.svg)
+
+   ![](https://296830-909578-raikfcquaxqncofqfm.stackpathdns.com/wp-content/uploads/2019/06/before_after_1-1.svg)
+
 - The diagram above shows histograms of activation values, across pixels and examples in a batch, before and after a batch norm layer. Different channels are represented by different colours; the per channel mean is shown underneath; and minimum/maximum values per channel are indicated by the vertical ticks
 
 ### Post-8: Bag of tricks
