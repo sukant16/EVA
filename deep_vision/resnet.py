@@ -1,3 +1,16 @@
+"""ResNet v1, v2, and segmentation models for Keras.
+# Reference
+- [Deep Residual Learning for Image Recognition](https://arxiv.org/abs/1512.03385)
+- [Identity Mappings in Deep Residual Networks](https://arxiv.org/abs/1603.05027)
+Reference material for extended functionality:
+- [ResNeXt](https://arxiv.org/abs/1611.05431) for Tiny ImageNet support.
+- [Dilated Residual Networks](https://arxiv.org/pdf/1705.09914) for segmentation support
+- [Deep Residual Learning for Instrument Segmentation in
+   Robotic Surgery](https://arxiv.org/abs/1703.08580)
+  for segmentation support.
+Implementation Adapted from: github.com/raghakot/keras-resnet
+"""
+
 import six
 from keras.models import Model
 from keras.layers import Input
