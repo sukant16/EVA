@@ -1,2 +1,4 @@
 keras_lr_finder/*
 Papers/*
+*.DS_Store
+.DS_Store
